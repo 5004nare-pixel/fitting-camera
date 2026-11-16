@@ -141,6 +141,24 @@
 
 <script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/build/mp4-muxer.js"></script>
 <script>
+/* 카톡·인스타 등 앱 내 브라우저에서는 저장·카메라가 막히는 경우가 많아 외부 브라우저로 넘김 */
+(() => {
+  const ua = navigator.userAgent || '';
+  if (/KAKAOTALK/i.test(ua)) {
+    location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
+    return;
+  }
+  if (/Instagram|FBAN|FBAV|NAVER\(inapp|Line\/|DaumApps|everytimeApp|; wv\)/i.test(ua)) {
+    document.addEventListener('DOMContentLoaded', () => {
+      const b = document.createElement('div');
+      b.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 12px);z-index:20;background:#ff5c8a;color:#fff;padding:14px 16px;border-radius:14px;font-size:14px;line-height:1.5;text-align:center';
+      b.innerHTML = '앱 안 브라우저에서는 저장이 안 될 수 있어요.<br>오른쪽 위 메뉴에서 <b>다른 브라우저(크롬)로 열기</b>를 눌러주세요.';
+      document.body.appendChild(b);
+    });
+  }
+})();
+</script>
+<script>
 (() => {
 const $ = id => document.getElementById(id);
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
