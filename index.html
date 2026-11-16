@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>피팅 카메라</title>
+<style>
+  :root{--bg:#111;--fg:#fff;--accent:#ff5c8a;--muted:#9a9a9a}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font-family:-apple-system,"Pretendard","Apple SD Gothic Neo","Noto Sans KR",sans-serif;overflow:hidden}
+  button{font:inherit;border:0;border-radius:999px;padding:12px 18px;background:#2a2a2a;color:#fff;font-weight:600}
+  button.primary{background:var(--accent)}
+  button:disabled{opacity:.4}
+  .screen{position:fixed;inset:0;display:none;flex-direction:column}
+  .screen.on{display:flex}
+  /* step 1 */
+  #s1{padding:calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px);gap:14px;overflow:auto}
+  h1{font-size:20px;margin:4px 0 0}
+  .sub{color:var(--muted);font-size:13px;margin:0;line-height:1.5}
+  #intro{display:flex;flex-direction:column;gap:14px}
+  .lead{margin:0;font-size:16px;line-height:1.55;color:#ddd}
+  .card{background:#1c1c1c;border-radius:16px;padding:16px 18px}
+  .card h2{font-size:14px;margin:0 0 8px;color:var(--accent)}
+  .card ol,.card ul{margin:0;padding-left:20px;font-size:14px;line-height:1.7;color:#e6e6e6}
+  #pick{display:flex;align-items:center;justify-content:center;border-radius:999px;padding:16px;background:var(--accent);color:#fff;font-size:16px;font-weight:700;margin-top:6px}
+  .credit{margin-top:auto;padding-top:20px;text-align:center;font-size:11px;letter-spacing:.5px;color:#666}
+  #editWrap{display:none;flex-direction:column;align-items:center;gap:12px}
+  #ec{touch-action:none;border-radius:14px;background:#000;max-width:100%}
+  .row{display:flex;gap:8px;align-items:center;width:100%}
+  .row label{font-size:13px;color:var(--muted);white-space:nowrap}
+  input[type=range]{flex:1;accent-color:var(--accent)}
+  .seg{display:flex;background:#222;border-radius:999px;padding:4px;width:100%}
+  .seg button{flex:1;background:transparent;padding:9px}
+  .seg button.on{background:#fff;color:#111}
+  .grow{flex:1}
+  /* step 2 */
+  #s2{background:#000}
+  #view{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+  #top{position:absolute;left:0;right:0;top:0;padding:calc(env(safe-area-inset-top) + 10px) 12px 10px;display:flex;gap:8px;justify-content:space-between;background:linear-gradient(#0009,#0000)}
+  #top button{padding:9px 13px;font-size:13px;background:#0008;backdrop-filter:blur(6px)}
+  #top button.on{background:var(--accent)}
+  #bottom{position:absolute;left:0;right:0;bottom:0;padding:12px 16px calc(env(safe-area-inset-bottom) + 18px);background:linear-gradient(#0000,#000a);display:flex;flex-direction:column;gap:12px}
+  #shutters{display:flex;align-items:center;justify-content:center;gap:28px}
+  #shot{width:58px;height:58px;padding:0;background:#fff;border:4px solid #fff8}
+  #rec{width:72px;height:72px;padding:0;background:transparent;border:4px solid #fff;display:flex;align-items:center;justify-content:center}
+  #rec i{display:block;width:52px;height:52px;border-radius:50%;background:#ff3b3b;transition:.2s}
+  #rec.recording i{width:28px;height:28px;border-radius:7px}
+  #flip{width:58px;height:58px;padding:0;background:#0008;font-size:22px}
+  #timer{position:absolute;top:calc(env(safe-area-inset-top) + 64px);left:50%;transform:translateX(-50%);background:#ff3b3b;padding:5px 12px;border-radius:999px;font-size:13px;font-weight:700;display:none}
+  #hint{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);background:#000b;padding:14px 18px;border-radius:14px;font-size:14px;text-align:center;line-height:1.6;pointer-events:none;transition:opacity .4s}
+  .clean #top,.clean #bottom{display:none}
+  #err{position:absolute;inset:0;display:none;align-items:center;justify-content:center;padding:28px;text-align:center;line-height:1.7;font-size:14px;background:#000}
+  /* result */
+  #res{position:fixed;inset:0;background:#000e;display:none;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:20px;z-index:10}
+  #res.on{display:flex}
+  #resMedia{max-width:100%;max-height:68vh;border-radius:12px;display:flex}
+  #resMedia img,#resMedia video{max-width:100%;max-height:68vh;border-radius:12px}
+  #res .row{justify-content:center;max-width:420px}
+  #resNote{color:var(--muted);font-size:12px;text-align:center;line-height:1.5;max-width:360px}
+</style>
+</head>
+<body>
+
+<!-- STEP 1: 얼굴 사진 고르기 -->
+<section id="s1" class="screen on">
+  <div id="intro">
+    <h1>피팅 카메라</h1>
+    <p class="lead">입어보기는 귀찮지만,<br>내가 입으면 어떤 느낌일까 궁금할 때</p>
+
+    <div class="card">
+      <h2>사용 방법</h2>
+      <ol>
+        <li>셀카를 골라주세요</li>
+        <li>카메라를 마네킹/코디 화면에 비추고 얼굴을 맞춰 찍어주세요</li>
+      </ol>
+    </div>
+    <div class="card">
+      <h2>유의사항</h2>
+      <ul>
+        <li>사진이나 영상이 외부로 전송되지 않아요</li>
+      </ul>
+    </div>
+
+    <label id="pick" for="file">셀카 고르기</label>
+  </div>
+  <input id="file" type="file" accept="image/*" hidden>
+
+  <div id="editWrap">
+    <div class="seg" id="shapeSeg">
+      <button data-shape="oval" class="on">얼굴만</button>
+      <button data-shape="box">영상통화 박스</button>
+    </div>
+    <canvas id="ec"></canvas>
+    <p class="sub" style="text-align:center">드래그로 위치, 두 손가락으로 크기를 맞춰주세요</p>
+    <div class="row"><label>크기</label><input id="zoom" type="range" min="0.2" max="4" step="0.01" value="1"></div>
+    <div class="row">
+      <button class="grow" onclick="document.getElementById('file').click()">다른 사진</button>
+      <button class="grow primary" id="go">카메라 켜기</button>
+    </div>
+  </div>
+
+  <footer class="credit">created by NYP</footer>
+</section>
+
+<!-- STEP 2: 카메라 -->
+<section id="s2" class="screen">
+  <canvas id="view"></canvas>
+  <video id="vid" playsinline muted autoplay style="display:none"></video>
+  <div id="timer">● 00:00</div>
+  <div id="hint">폰을 움직여 얼굴을<br>옷 목 위치에 맞춰주세요</div>
+
+  <div id="top">
+    <button id="back">← 사진</button>
+    <div style="display:flex;gap:6px">
+      <button id="ghost" class="on">반투명</button>
+      <button id="clean">화면만</button>
+    </div>
+  </div>
+
+  <div id="bottom">
+    <div class="row"><label style="color:#ddd">얼굴 크기</label><input id="fsize" type="range" min="0.08" max="0.9" step="0.005" value="0.28"></div>
+    <div id="shutters">
+      <button id="shot" title="사진"></button>
+      <button id="rec" title="녹화"><i></i></button>
+      <button id="flip" title="카메라 전환">⟲</button>
+    </div>
+  </div>
+  <div id="err"></div>
+</section>
+
+<!-- 결과 -->
+<div id="res">
+  <div id="resMedia"></div>
+  <div class="row">
+    <button class="grow" id="resClose">다시 찍기</button>
+    <button class="grow" id="resSave">저장</button>
+    <button class="grow primary" id="resShare">공유</button>
+  </div>
+  <p id="resNote"></p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mp4-muxer@5.2.2/build/mp4-muxer.js"></script>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const DPR = Math.min(window.devicePixelRatio || 1, 2);
+
+/* ---------------- STEP 1: editor ---------------- */
+const ec = $('ec'), ex = ec.getContext('2d');
+const E = { img:null, x:0, y:0, s:1, shape:'oval', W:0, H:0, g:null };
+let sticker = null;
+
+function layoutEditor(){
+  const W = Math.min(window.innerWidth - 32, 420), H = Math.round(W * 1.2);
+  E.W = W; E.H = H;
+  ec.style.width = W+'px'; ec.style.height = H+'px';
+  ec.width = W*DPR; ec.height = H*DPR;
+  const gw = E.shape === 'oval' ? W*0.56 : W*0.62;
+  const gh = E.shape === 'oval' ? gw*1.32 : gw*1.25;
+  E.g = { x:(W-gw)/2, y:(H-gh)/2, w:gw, h:gh };
+}
+function guidePath(ctx, g){
+  ctx.beginPath();
+  if (E.shape === 'oval') ctx.ellipse(g.x+g.w/2, g.y+g.h/2, g.w/2, g.h/2, 0, 0, Math.PI*2);
+  else roundRect(ctx, g.x, g.y, g.w, g.h, g.w*0.09);
+}
+function roundRect(ctx,x,y,w,h,r){
+  ctx.moveTo(x+r,y);ctx.arcTo(x+w,y,x+w,y+h,r);ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);ctx.arcTo(x,y,x+w,y,r);ctx.closePath();
+}
+function drawEditor(){
+  if(!E.img) return;
+  ex.setTransform(DPR,0,0,DPR,0,0);
+  ex.clearRect(0,0,E.W,E.H);
+  const iw = E.img.width*E.s, ih = E.img.height*E.s;
+  ex.drawImage(E.img, E.x-iw/2, E.y-ih/2, iw, ih);
+  // dim outside guide
+  ex.save();
+  ex.beginPath(); ex.rect(0,0,E.W,E.H);
+  if (E.shape === 'oval') { ex.moveTo(E.g.x+E.g.w, E.g.y+E.g.h/2); ex.ellipse(E.g.x+E.g.w/2,E.g.y+E.g.h/2,E.g.w/2,E.g.h/2,0,0,Math.PI*2,true); }
+  else { const g=E.g,r=g.w*0.09; ex.moveTo(g.x+r,g.y); ex.arcTo(g.x,g.y,g.x,g.y+g.h,r); ex.arcTo(g.x,g.y+g.h,g.x+g.w,g.y+g.h,r); ex.arcTo(g.x+g.w,g.y+g.h,g.x+g.w,g.y,r); ex.arcTo(g.x+g.w,g.y,g.x,g.y,r); ex.closePath(); }
+  ex.fillStyle='rgba(0,0,0,.6)'; ex.fill('evenodd');
+  ex.restore();
+  guidePath(ex,E.g); ex.strokeStyle='#fff'; ex.lineWidth=2; ex.setLineDash([6,5]); ex.stroke(); ex.setLineDash([]);
+}
+function fitImage(){
+  // cover the guide initially
+  const g = E.g;
+  E.s = Math.max(g.w/E.img.width, g.h/E.img.height) * 1.6;
+  E.x = E.W/2; E.y = E.H/2;
+  syncZoom();
+}
+function syncZoom(){
+  const base = Math.max(E.g.w/E.img.width, E.g.h/E.img.height);
+  $('zoom').min = (base*0.5).toFixed(4); $('zoom').max = (base*8).toFixed(4);
+  $('zoom').step = (base/200).toFixed(5); $('zoom').value = E.s;
+}
+$('file').addEventListener('change', e => {
+  const f = e.target.files[0]; if(!f) return;
+  const url = URL.createObjectURL(f);
+  const img = new Image();
+  img.onload = () => {
+    E.img = img; $('intro').style.display='none'; $('editWrap').style.display='flex';
+    layoutEditor(); fitImage(); drawEditor();
+  };
+  img.src = url;
+});
+$('zoom').addEventListener('input', e => { E.s = +e.target.value; drawEditor(); });
+$('shapeSeg').addEventListener('click', e => {
+  const b = e.target.closest('button'); if(!b) return;
+  [...$('shapeSeg').children].forEach(x=>x.classList.toggle('on', x===b));
+  E.shape = b.dataset.shape; layoutEditor(); if(E.img){ syncZoom(); drawEditor(); }
+});
+// pan / pinch for editor
+gesture(ec, {
+  move:(dx,dy)=>{ E.x+=dx; E.y+=dy; drawEditor(); },
+  pinch:(k)=>{ E.s*=k; $('zoom').value=E.s; drawEditor(); },
+  scale:()=>1
+});
+
+function makeSticker(){
+  const g = E.g, ow = 640, oh = Math.round(ow*g.h/g.w), k = ow/g.w;
+  const c = document.createElement('canvas'); c.width=ow; c.height=oh;
+  const x = c.getContext('2d');
+  const iw=E.img.width*E.s*k, ih=E.img.height*E.s*k;
+  x.drawImage(E.img, (E.x-g.x)*k - iw/2, (E.y-g.y)*k - ih/2, iw, ih);
+  x.globalCompositeOperation='destination-in';
+  if (E.shape === 'oval'){
+    x.save(); x.translate(ow/2, oh/2); x.scale(1, oh/ow);
+    const gr = x.createRadialGradient(0,0,ow*0.38,0,0,ow/2);
+    gr.addColorStop(0,'#000'); gr.addColorStop(1,'rgba(0,0,0,0)');
+    x.fillStyle=gr; x.fillRect(-ow/2,-ow/2,ow,ow); x.restore();
+  } else {
+    x.beginPath(); roundRect(x,0,0,ow,oh,ow*0.09); x.fillStyle='#000'; x.fill();
+  }
+  return c;
+}
+
+/* ---------------- STEP 2: camera ---------------- */
+const view = $('view'), vx = view.getContext('2d'), vid = $('vid');
+const S = { cx:0.5, cy:0.33, w:0.28, ghost:true, facing:'environment', stream:null, recording:false };
+let raf = 0;
+
+$('go').addEventListener('click', async () => {
+  sticker = makeSticker();
+  S.shape = E.shape;
+  S.w = E.shape==='oval' ? 0.28 : 0.42; $('fsize').value = S.w;
+  $('s1').classList.remove('on'); $('s2').classList.add('on');
+  sizeView(); await startCam(); loop();
+  setTimeout(()=>$('hint').style.opacity=0, 3500);
+});
+$('back').addEventListener('click', () => {
+  if (S.recording) return;
+  stopCam(); cancelAnimationFrame(raf);
+  $('s2').classList.remove('on'); $('s1').classList.add('on');
+});
+
+function sizeView(){
+  const w = window.innerWidth, h = window.innerHeight;
+  let k = DPR; const maxSide = 1920;
+  if (Math.max(w,h)*k > maxSide) k = maxSide/Math.max(w,h);
+  view.width = Math.round(w*k/2)*2; view.height = Math.round(h*k/2)*2;
+}
+window.addEventListener('resize', () => { if($('s2').classList.contains('on') && !S.recording) sizeView(); });
+
+async function startCam(){
+  stopCam();
+  try{
+    S.stream = await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ideal:S.facing}, width:{ideal:1920}, height:{ideal:1080} }, audio:false
+    });
+    vid.srcObject = S.stream; await vid.play();
+    $('err').style.display='none';
+  }catch(e){
+    $('err').style.display='flex';
+    $('err').innerHTML = '카메라를 켤 수 없어요.<br>브라우저 설정에서 카메라 권한을 허용해 주세요.<br><br><small style="color:#888">'+(e && e.name || '')+'</small>';
+  }
+}
+function stopCam(){ if(S.stream){ S.stream.getTracks().forEach(t=>t.stop()); S.stream=null; } }
+$('flip').addEventListener('click', async () => {
+  if (S.recording) return;
+  S.facing = S.facing==='environment' ? 'user' : 'environment'; await startCam();
+});
+
+function loop(){
+  const W=view.width, H=view.height;
+  vx.fillStyle='#000'; vx.fillRect(0,0,W,H);
+  if (vid.videoWidth){
+    const vr = vid.videoWidth/vid.videoHeight, cr = W/H;
+    let dw,dh; if (vr>cr){ dh=H; dw=H*vr; } else { dw=W; dh=W/vr; }
+    vx.save();
+    if (S.facing==='user'){ vx.translate(W,0); vx.scale(-1,1); }
+    vx.drawImage(vid,(W-dw)/2,(H-dh)/2,dw,dh);
+    vx.restore();
+  }
+  if (sticker){
+    const sw = S.w*W, sh = sw*sticker.height/sticker.width;
+    const x = S.cx*W - sw/2, y = S.cy*H - sh/2;
+    vx.save();
+    vx.globalAlpha = (S.ghost && !S.recording && !S.capturing) ? 0.6 : 1;
+    if (S.shape==='box'){ vx.shadowColor='rgba(0,0,0,.35)'; vx.shadowBlur=W*0.02; }
+    vx.drawImage(sticker,x,y,sw,sh);
+    vx.restore();
+  }
+  feedFrame();
+  raf = requestAnimationFrame(loop);
+}
+
+// drag / pinch the face on the camera view
+gesture(view, {
+  move:(dx,dy)=>{ S.cx += dx/view.clientWidth; S.cy += dy/view.clientHeight; },
+  pinch:(k)=>{ S.w = Math.max(0.05, Math.min(1, S.w*k)); $('fsize').value=S.w; },
+  tap:()=>{ if(document.body.classList.contains('clean')) { if(Date.now()-S.lastTap<350){ document.body.classList.remove('clean'); } S.lastTap=Date.now(); } }
+});
+S.lastTap = 0;
+$('fsize').addEventListener('input', e => S.w = +e.target.value);
+$('ghost').addEventListener('click', e => { S.ghost=!S.ghost; e.currentTarget.classList.toggle('on',S.ghost); });
+$('clean').addEventListener('click', () => {
+  document.body.classList.add('clean');
+  $('hint').innerHTML='버튼이 숨겨졌어요.<br>폰 화면녹화로 찍어도 돼요.<br>두 번 탭하면 버튼이 돌아와요.';
+  $('hint').style.opacity=1; setTimeout(()=>$('hint').style.opacity=0, 2500);
+});
+
+/* photo */
+$('shot').addEventListener('click', () => {
+  S.capturing = true;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    view.toBlob(b => { S.capturing=false; showResult(b,'image'); }, 'image/jpeg', 0.92);
+  }));
+});
+
+/* recording
+   1순위: WebCodecs(H.264) + mp4-muxer → 갤러리·인스타 호환 일반 MP4
+   2순위: MediaRecorder (지원 브라우저가 아닐 때) */
+let rec=null, chunks=[], t0=0, tick=0, stopRec=null;
+const W4 = { enc:null, mux:null, last:0, n:0, busy:false };
+
+async function pickAvc(w,h){
+  if (!('VideoEncoder' in window) || !window.Mp4Muxer) return null;
+  for (const codec of ['avc1.640028','avc1.4d0028','avc1.42e028','avc1.640033','avc1.42001f']){
+    try{
+      const r = await VideoEncoder.isConfigSupported({codec, width:w, height:h, bitrate:8e6, framerate:30});
+      if (r.supported) return codec;
+    }catch(e){}
+  }
+  return null;
+}
+function startTimer(){
+  S.recording=true; $('rec').classList.add('recording');
+  t0=performance.now(); $('timer').style.display='block'; $('timer').textContent='● 00:00';
+  tick=setInterval(()=>{ const s=Math.floor((performance.now()-t0)/1000); $('timer').textContent='● '+String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0'); if(s>=60 && stopRec) stopRec(); },250);
+}
+function endTimer(){ S.recording=false; $('rec').classList.remove('recording'); $('timer').style.display='none'; clearInterval(tick); }
+
+// loop()에서 매 프레임 호출: 30fps로 캔버스를 인코더에 넣음
+function feedFrame(){
+  if (!W4.enc || !S.recording) return;
+  const now = performance.now();
+  if (now - W4.last < 1000/30 - 2) return;
+  if (W4.enc.encodeQueueSize > 6) return; // 밀리면 프레임 건너뜀
+  W4.last = now;
+  const frame = new VideoFrame(view, { timestamp: Math.round((now - t0)*1000) });
+  W4.enc.encode(frame, { keyFrame: W4.n % 60 === 0 });
+  frame.close(); W4.n++;
+}
+
+$('rec').addEventListener('click', async () => {
+  if (S.recording){ stopRec && stopRec(); return; }
+  if (W4.busy) return;
+  W4.busy = true;
+  const w = view.width, h = view.height;
+  const codec = await pickAvc(w,h);
+  if (codec){
+    W4.mux = new Mp4Muxer.Muxer({
+      target: new Mp4Muxer.ArrayBufferTarget(),
+      video: { codec:'avc', width:w, height:h, frameRate:30 },
+      fastStart: 'in-memory',
+      firstTimestampBehavior: 'offset'
+    });
+    W4.enc = new VideoEncoder({
+      output: (chunk, meta) => W4.mux.addVideoChunk(chunk, meta),
+      error: e => console.error(e)
+    });
+    W4.enc.configure({ codec, width:w, height:h, bitrate:8e6, framerate:30, avc:{format:'avc'} });
+    W4.n = 0; W4.last = 0;
+    stopRec = async () => {
+      stopRec = null; endTimer();
+      $('resMedia').innerHTML=''; $('resNote').textContent='영상 저장 중…'; $('res').classList.add('on');
+      try{
+        await W4.enc.flush(); W4.enc.close();
+        W4.mux.finalize();
+        showResult(new Blob([W4.mux.target.buffer], {type:'video/mp4'}), 'video');
+      }catch(e){ $('resNote').textContent='저장 중 오류가 났어요. "화면만" 모드 + 폰 화면녹화를 이용해 주세요.'; }
+      W4.enc = null; W4.mux = null;
+    };
+    startTimer(); W4.busy=false; return;
+  }
+
+  // fallback: MediaRecorder
+  const list=['video/mp4;codecs=avc1.42E01E','video/mp4;codecs=avc1','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
+  if (!window.MediaRecorder || !view.captureStream){
+    W4.busy=false;
+    alertBox('이 브라우저에서는 녹화가 안 돼요. 크롬으로 열거나 \'화면만\' 모드에서 폰 화면녹화를 이용해 주세요.'); return;
+  }
+  const mime = list.find(m => MediaRecorder.isTypeSupported(m)) || '';
+  const stream = view.captureStream(30);
+  try{ rec = new MediaRecorder(stream, mime?{mimeType:mime, videoBitsPerSecond:8e6}:{videoBitsPerSecond:8e6}); }
+  catch(e){ rec = new MediaRecorder(stream); }
+  chunks=[];
+  rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+  rec.onstop = () => { endTimer(); showResult(new Blob(chunks,{type: rec.mimeType || mime || 'video/webm'}), 'video'); };
+  stopRec = () => { stopRec=null; rec.stop(); };
+  rec.start(250);
+  startTimer(); W4.busy=false;
+});
+
+/* result sheet */
+let resBlob=null, resKind='';
+function showResult(blob, kind){
+  resBlob=blob; resKind=kind;
+  const url = URL.createObjectURL(blob);
+  $('resMedia').innerHTML = kind==='image' ? `<img src="${url}">` : `<video src="${url}" controls autoplay loop playsinline></video>`;
+  const isWebm = kind==='video' && /webm/.test(blob.type);
+  $('resNote').textContent = isWebm ? 'WebM 형식으로 저장돼요. 인스타에 안 올라가면 "화면만" 모드 + 폰 화면녹화를 이용해 주세요.' : (kind==='video' ? '최대 60초까지 녹화돼요.' : '');
+  $('res').classList.add('on');
+}
+function fileName(){
+  const ext = resKind==='image' ? 'jpg' : (/mp4/.test(resBlob.type)?'mp4':'webm');
+  return 'fitting-camera-'+Date.now()+'.'+ext;
+}
+$('resClose').addEventListener('click', ()=>{ $('res').classList.remove('on'); });
+$('resSave').addEventListener('click', ()=>{
+  const a=document.createElement('a'); a.href=URL.createObjectURL(resBlob); a.download=fileName();
+  document.body.appendChild(a); a.click(); a.remove();
+});
+$('resShare').addEventListener('click', async ()=>{
+  const f = new File([resBlob], fileName(), {type:resBlob.type});
+  if (navigator.canShare && navigator.canShare({files:[f]})){
+    try{ await navigator.share({files:[f], title:'피팅 카메라'}); }catch(e){}
+  } else { $('resSave').click(); }
+});
+function alertBox(msg){ $('resMedia').innerHTML=''; $('resNote').textContent=msg; $('res').classList.add('on'); }
+
+/* ---------------- shared gesture helper ---------------- */
+function gesture(el, h){
+  const pts = new Map(); let lastDist=0, moved=false;
+  el.addEventListener('pointerdown', e => { el.setPointerCapture(e.pointerId); pts.set(e.pointerId,{x:e.clientX,y:e.clientY}); moved=false; if(pts.size===2) lastDist=dist(); });
+  el.addEventListener('pointermove', e => {
+    if(!pts.has(e.pointerId)) return;
+    const p=pts.get(e.pointerId), dx=e.clientX-p.x, dy=e.clientY-p.y;
+    if (Math.abs(dx)+Math.abs(dy)>3) moved=true;
+    pts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if (pts.size===1) h.move(dx,dy);
+    else if (pts.size===2){ const d=dist(); if(lastDist) h.pinch(d/lastDist); lastDist=d; h.move(dx/2,dy/2); }
+  });
+  const up = e => { pts.delete(e.pointerId); lastDist = pts.size===2?dist():0; if(!moved && h.tap) h.tap(); };
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  function dist(){ const [a,b]=[...pts.values()]; return Math.hypot(a.x-b.x,a.y-b.y); }
+}
+})();
+</script>
+</body>
+</html>
