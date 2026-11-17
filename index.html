@@ -105,7 +105,7 @@
 <!-- STEP 2: 카메라 -->
 <section id="s2" class="screen">
   <canvas id="view"></canvas>
-  <video id="vid" playsinline muted autoplay style="display:none"></video>
+  <video id="vid" playsinline webkit-playsinline muted autoplay style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none"></video>
   <div id="timer">● 00:00</div>
   <div id="hint">폰을 움직여 얼굴을<br>옷 목 위치에 맞춰주세요</div>
 
@@ -161,6 +161,7 @@
 <script>
 (() => {
 const $ = id => document.getElementById(id);
+const IS_IOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const DPR = Math.min(window.devicePixelRatio || 1, 2);
 
 /* ---------------- STEP 1: editor ---------------- */
@@ -439,23 +440,41 @@ function showResult(blob, kind){
   const url = URL.createObjectURL(blob);
   $('resMedia').innerHTML = kind==='image' ? `<img src="${url}">` : `<video src="${url}" controls autoplay loop playsinline></video>`;
   const isWebm = kind==='video' && /webm/.test(blob.type);
-  $('resNote').textContent = isWebm ? 'WebM 형식으로 저장돼요. 인스타에 안 올라가면 "화면만" 모드 + 폰 화면녹화를 이용해 주세요.' : (kind==='video' ? '최대 60초까지 녹화돼요.' : '');
+  let note = isWebm ? 'WebM 형식으로 저장돼요. 인스타에 안 올라가면 "화면만" 모드 + 폰 화면녹화를 이용해 주세요.' : (kind==='video' ? '최대 60초까지 녹화돼요.' : '');
+  if (IS_IOS) note = (kind==='image' ? '저장을 누르고 \'이미지 저장\'을 선택해 주세요. 사진을 길게 눌러도 저장돼요.' : '저장을 누르고 \'비디오 저장\'을 선택해 주세요.') + (note ? ' ' + note : '');
+  $('resNote').textContent = note;
   $('res').classList.add('on');
 }
 function fileName(){
   const ext = resKind==='image' ? 'jpg' : (/mp4/.test(resBlob.type)?'mp4':'webm');
   return 'fitting-camera-'+Date.now()+'.'+ext;
 }
-$('resClose').addEventListener('click', ()=>{ $('res').classList.remove('on'); });
-$('resSave').addEventListener('click', ()=>{
-  const a=document.createElement('a'); a.href=URL.createObjectURL(resBlob); a.download=fileName();
+function resFile(){
+  // iOS는 'video/mp4;codecs=…'처럼 부가정보가 붙으면 사진앱 저장을 못 하는 경우가 있어 기본 타입만 사용
+  const type = (resBlob.type || '').split(';')[0] || (resKind==='image' ? 'image/jpeg' : 'video/mp4');
+  return new File([resBlob], fileName(), {type});
+}
+// 아이폰: <a download>가 사진앱으로 저장되지 않으므로 공유 시트(이미지/비디오 저장)를 사용
+async function shareFile(withTitle){
+  const f = resFile();
+  if (!(navigator.canShare && navigator.canShare({files:[f]}))) return false;
+  try{
+    // iOS에서는 title/text를 같이 넘기면 '저장' 항목이 사라질 수 있어 파일만 넘김
+    await navigator.share(withTitle && !IS_IOS ? {files:[f], title:'피팅 카메라'} : {files:[f]});
+  }catch(e){ /* 사용자가 닫은 경우 */ }
+  return true;
+}
+function downloadFile(){
+  const a=document.createElement('a'); a.href=URL.createObjectURL(resFile()); a.download=fileName();
   document.body.appendChild(a); a.click(); a.remove();
+}
+$('resClose').addEventListener('click', ()=>{ $('res').classList.remove('on'); });
+$('resSave').addEventListener('click', async ()=>{
+  if (IS_IOS && await shareFile(false)) return;
+  downloadFile();
 });
 $('resShare').addEventListener('click', async ()=>{
-  const f = new File([resBlob], fileName(), {type:resBlob.type});
-  if (navigator.canShare && navigator.canShare({files:[f]})){
-    try{ await navigator.share({files:[f], title:'피팅 카메라'}); }catch(e){}
-  } else { $('resSave').click(); }
+  if (!(await shareFile(true))) downloadFile();
 });
 function alertBox(msg){ $('resMedia').innerHTML=''; $('resNote').textContent=msg; $('res').classList.add('on'); }
 
